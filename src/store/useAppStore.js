@@ -1,4 +1,5 @@
 import create from 'zustand'
+import * as api from '../services/api'
 
 let notificationTimeoutId = null
 
@@ -138,45 +139,23 @@ function buildDeliveryRecord(input, existingRecord = null) {
   })
 }
 
-function createDemoDeliveries() {
-  return sortDeliveries([
-    buildDeliveryRecord({
-      id: '1',
-      customerName: 'Ahmed',
-      phoneNumber: '9876543210',
-      notes: 'Morning drop for the front shop',
-      coolerCount: 2,
-      bottleCount: 4,
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    }),
-    buildDeliveryRecord({
-      id: '2',
-      customerName: 'Nadia',
-      phoneNumber: '9123456780',
-      notes: 'Completed evening route',
-      coolerCount: 1,
-      bottleCount: 2,
-      coolersReturned: 1,
-      bottlesReturned: 2,
-      createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
-      completedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-    }),
-    buildDeliveryRecord({
-      id: '3',
-      customerName: 'Karim',
-      phoneNumber: '9012345678',
-      notes: 'Overdue return pending',
-      coolerCount: 1,
-      bottleCount: 1,
-      coolersReturned: 0,
-      bottlesReturned: 0,
-      createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000),
-    }),
-  ])
+async function loadDeliveriesSnapshot() {
+  const rows = await api.getDeliveries()
+  const deliveries = Array.isArray(rows) ? sortDeliveries(rows.map((r) => normalizeDeliveryRecord(r))) : []
+
+  let summary = null
+  try {
+    summary = await api.getSummary()
+  } catch (err) {
+    summary = null
+  }
+
+  return { deliveries, summary }
 }
 
 export const useAppStore = create((set, get) => ({
   deliveries: null,
+  summary: null,
   notification: null,
 
   clearNotification: () => {
@@ -192,12 +171,60 @@ export const useAppStore = create((set, get) => ({
   },
 
   initializeDeliveries: () => {
-    // No backend: initialize with local demo deliveries
-    set({ deliveries: createDemoDeliveries() })
+    // Try loading from backend, otherwise show empty state instead of fake records.
+    ;(async () => {
+      try {
+        const snapshot = await loadDeliveriesSnapshot()
+        set(snapshot)
+        return
+      } catch (err) {
+        // ignore and fall back to an empty list
+      }
+
+      set({ deliveries: [] })
+    })()
+
     return true
   },
 
-  addEntry: (entry) => {
+  refreshDeliveries: async () => {
+    try {
+      const rows = await api.getDeliveries()
+      if (Array.isArray(rows)) {
+        set({ deliveries: sortDeliveries(rows.map((r) => normalizeDeliveryRecord(r))) })
+      }
+      return true
+    } catch (err) {
+      get().notify('Failed to refresh deliveries.', 'warning')
+      return false
+    }
+  },
+
+  refreshSnapshot: async ({ silent = false } = {}) => {
+    try {
+      const snapshot = await loadDeliveriesSnapshot()
+      set(snapshot)
+      return snapshot
+    } catch (err) {
+      if (!silent) {
+        get().notify('Failed to refresh deliveries.', 'warning')
+      }
+      return null
+    }
+  },
+
+  refreshSummary: async () => {
+    try {
+      const summary = await api.getSummary()
+      set({ summary })
+      return summary
+    } catch (err) {
+      get().notify('Failed to refresh summary.', 'warning')
+      return null
+    }
+  },
+
+  addEntry: async (entry) => {
     const customerName = entry.customerName?.trim() ?? ''
     const phoneNumber = entry.phoneNumber?.trim() ?? ''
     const coolerCount = Number(entry.coolerCount ?? 1)
@@ -218,15 +245,18 @@ export const useAppStore = create((set, get) => ({
       return false
     }
 
-    const id = String(Date.now())
-    const next = buildDeliveryRecord({ id, customerName, phoneNumber, notes: entry.notes ?? '', coolerCount, bottleCount })
-
-    set((state) => ({ deliveries: sortDeliveries([next, ...(state.deliveries ?? [])]) }))
-    get().notify('Delivery saved.', 'success')
-    return true
+    try {
+      const created = await api.createDelivery({ customerName, phoneNumber, coolerCount, bottleCount, notes: entry.notes ?? '' })
+      set((state) => ({ deliveries: sortDeliveries([buildDeliveryRecord(created), ...(state.deliveries ?? [])]) }))
+      get().notify('Delivery saved.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to save delivery.', 'danger')
+      return false
+    }
   },
 
-  updateDelivery: (deliveryId, updates) => {
+  updateDelivery: async (deliveryId, updates) => {
     const record = (get().deliveries ?? []).find((item) => item.id === deliveryId)
     if (!record) return false
 
@@ -243,54 +273,68 @@ export const useAppStore = create((set, get) => ({
       return false
     }
 
-    const merged = buildDeliveryRecord({ ...record, ...updates }, record)
-
-    set((state) => ({
-      deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? merged : item))),
-    }))
-
-    get().notify('Delivery updated.', 'success')
-    return true
+    try {
+      const updated = await api.updateDelivery(deliveryId, updates)
+      const next = buildDeliveryRecord(updated)
+      set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
+      get().notify('Delivery updated.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to update delivery.', 'danger')
+      return false
+    }
   },
 
   editDelivery: (deliveryId, updates) => get().updateDelivery(deliveryId, updates),
 
-  returnCooler: (deliveryId) => {
-    const record = (get().deliveries ?? []).find((item) => item.id === deliveryId)
-    if (!record || Number(record.coolersPending ?? 0) <= 0) return false
-
-    const next = buildDeliveryRecord({ ...record, coolersReturned: Number(record.coolersReturned ?? 0) + 1 }, record)
-    set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
-    get().notify('Cooler returned.', 'success')
-    return true
+  returnCooler: async (deliveryId) => {
+    try {
+      const updated = await api.returnCooler(deliveryId)
+      const next = buildDeliveryRecord(updated)
+      set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
+      get().notify('Cooler returned.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to return cooler.', 'danger')
+      return false
+    }
   },
 
-  returnBottle: (deliveryId) => {
-    const record = (get().deliveries ?? []).find((item) => item.id === deliveryId)
-    if (!record || Number(record.bottlesPending ?? 0) <= 0) return false
-
-    const next = buildDeliveryRecord({ ...record, bottlesReturned: Number(record.bottlesReturned ?? 0) + 1 }, record)
-    set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
-    get().notify('Bottle returned.', 'success')
-    return true
+  returnBottle: async (deliveryId) => {
+    try {
+      const updated = await api.returnBottle(deliveryId)
+      const next = buildDeliveryRecord(updated)
+      set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
+      get().notify('Bottle returned.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to return bottle.', 'danger')
+      return false
+    }
   },
 
-  returnAll: (deliveryId) => {
-    const record = (get().deliveries ?? []).find((item) => item.id === deliveryId)
-    if (!record) return false
-
-    const next = buildDeliveryRecord({ ...record, coolersReturned: record.coolersIssued, bottlesReturned: record.bottlesIssued, completedAt: new Date() }, record)
-    set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
-    get().notify('Delivery completed.', 'success')
-    return true
+  returnAll: async (deliveryId) => {
+    try {
+      const updated = await api.returnAll(deliveryId)
+      const next = buildDeliveryRecord(updated)
+      set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).map((item) => (item.id === deliveryId ? next : item))) }))
+      get().notify('Delivery completed.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to complete delivery.', 'danger')
+      return false
+    }
   },
 
-  deleteDelivery: (deliveryId) => {
-    const existing = (get().deliveries ?? []).some((item) => item.id === deliveryId)
-    if (!existing) return false
-
-    set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).filter((item) => item.id !== deliveryId)) }))
-    get().notify('Delivery deleted.', 'success')
-    return true
+  deleteDelivery: async (deliveryId) => {
+    try {
+      await api.deleteDelivery(deliveryId)
+      set((state) => ({ deliveries: sortDeliveries((state.deliveries ?? []).filter((item) => item.id !== deliveryId)) }))
+      get().notify('Delivery deleted.', 'success')
+      return true
+    } catch (err) {
+      get().notify(err.message || 'Failed to delete delivery.', 'danger')
+      return false
+    }
   },
 }))

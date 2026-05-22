@@ -8,10 +8,44 @@ function App() {
   const notification = useAppStore((s) => s.notification)
   const clearNotification = useAppStore((s) => s.clearNotification)
   const initializeDeliveries = useAppStore((s) => s.initializeDeliveries)
+  const refreshSnapshot = useAppStore((s) => s.refreshSnapshot)
 
   useEffect(() => {
     initializeDeliveries()
   }, [initializeDeliveries])
+
+  useEffect(() => {
+    let cancelled = false
+    let inFlight = false
+
+    const syncNow = async () => {
+      if (cancelled || inFlight) return
+      inFlight = true
+      try {
+        await refreshSnapshot({ silent: true })
+      } finally {
+        inFlight = false
+      }
+    }
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        syncNow()
+      }
+    }
+
+    syncNow()
+    const intervalId = window.setInterval(syncNow, 5000)
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+    }
+  }, [refreshSnapshot])
 
   return (
     <div className="min-h-dvh bg-[#F7F9FC] text-slate-900 antialiased">

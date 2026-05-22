@@ -39,13 +39,25 @@ function Dashboard() {
       .sort((a, b) => new Date(b.completedAt || b.lastActionAt || b.createdAt).getTime() - new Date(a.completedAt || a.lastActionAt || a.createdAt).getTime())
   }, [deliveries])
 
-  // PHASE 4: Memoize summary calculations to prevent recalculation on every render
-  const summary = useMemo(() => ({
-    pendingCoolers: activeRecords.reduce((total, record) => total + Math.max(0, record.coolersPending ?? 0), 0),
-    pendingBottles: activeRecords.reduce((total, record) => total + Math.max(0, record.bottlesPending ?? 0), 0),
-    activeCustomers: activeRecords.length,
-    overdueCustomers: activeRecords.filter((record) => record.status === 'overdue').length,
-  }), [activeRecords])
+  // Use server summary when available, otherwise compute locally
+  const serverSummary = useAppStore((s) => s.summary)
+  const summary = useMemo(() => {
+    if (serverSummary) {
+      return {
+        pendingCoolers: serverSummary.pendingCoolers ?? 0,
+        pendingBottles: serverSummary.pendingBottles ?? 0,
+        activeCustomers: serverSummary.activeDeliveries ?? 0,
+        overdueCustomers: serverSummary.overdueDeliveries ?? 0,
+      }
+    }
+
+    return {
+      pendingCoolers: activeRecords.reduce((total, record) => total + Math.max(0, record.coolersPending ?? 0), 0),
+      pendingBottles: activeRecords.reduce((total, record) => total + Math.max(0, record.bottlesPending ?? 0), 0),
+      activeCustomers: activeRecords.length,
+      overdueCustomers: activeRecords.filter((record) => record.status === 'overdue').length,
+    }
+  }, [serverSummary, activeRecords])
 
   // PHASE 4: Memoize recent feed to prevent unnecessary sorting on every render
   const recentFeed = useMemo(() => {
