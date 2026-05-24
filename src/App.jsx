@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import Header from './components/Header'
 import AppRouter from './components/AppRouter'
 import BottomNav from './components/ui/BottomNav'
+import InstallAppPrompt from './components/pwa/InstallAppPrompt'
 import { useAppStore } from './store/useAppStore'
 
 function App() {
@@ -49,7 +50,7 @@ function App() {
 
   return (
     <div className="min-h-dvh bg-[#F7F9FC] text-slate-900 antialiased">
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-white shadow-[0_0_0_1px_rgba(226,232,240,0.8)]">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-white pt-[env(safe-area-inset-top)] shadow-[0_0_0_1px_rgba(226,232,240,0.8)]">
         <Header />
         <main className="flex-1 overflow-y-auto px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4">
           <AppRouter />
@@ -75,6 +76,7 @@ function App() {
             <p className="mt-1 text-base font-medium">{notification.message}</p>
           </button>
         ) : null}
+        <InstallAppPrompt />
         <BottomNav />
       </div>
     </div>

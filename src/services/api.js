@@ -1,5 +1,15 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1'
 
+function getApiOrigin(apiBase = API_BASE) {
+  const normalizedBase = apiBase.replace(/\/$/, '')
+
+  try {
+    return new URL(normalizedBase).origin
+  } catch {
+    return normalizedBase.replace(/\/api\/v1$/, '')
+  }
+}
+
 async function request(path, options = {}) {
   const url = `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
   const hasBody = options.body !== undefined && options.body !== null
@@ -74,7 +84,7 @@ export async function getSummary() {
 }
 
 export async function health() {
-  const res = await fetch((import.meta.env.VITE_API_URL ?? 'http://localhost:4000') + '/health')
+  const res = await fetch(`${getApiOrigin()}/health`)
   return res.ok
 }
 
