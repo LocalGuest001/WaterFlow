@@ -1,12 +1,38 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1'
+const DEFAULT_LOCAL_API_BASE = 'http://localhost:4000/api/v1'
 
-function getApiOrigin(apiBase = API_BASE) {
-  const normalizedBase = apiBase.replace(/\/$/, '')
+function normalizeApiBase(rawBase) {
+  const value = typeof rawBase === 'string' ? rawBase.trim() : ''
+
+  if (!value) {
+    return DEFAULT_LOCAL_API_BASE
+  }
 
   try {
-    return new URL(normalizedBase).origin
+    const url = new URL(value, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const pathname = url.pathname.replace(/\/$/, '')
+
+    if (!pathname || pathname === '/') {
+      url.pathname = '/api/v1'
+    } else if (!pathname.endsWith('/api/v1')) {
+      url.pathname = `${pathname}/api/v1`
+    } else {
+      url.pathname = pathname
+    }
+
+    return url.toString().replace(/\/$/, '')
   } catch {
-    return normalizedBase.replace(/\/api\/v1$/, '')
+    const normalized = value.replace(/\/$/, '')
+    return normalized.endsWith('/api/v1') ? normalized : `${normalized}/api/v1`
+  }
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL)
+
+function getApiOrigin(apiBase = API_BASE) {
+  try {
+    return new URL(apiBase).origin
+  } catch {
+    return apiBase.replace(/\/api\/v1$/, '')
   }
 }
 
