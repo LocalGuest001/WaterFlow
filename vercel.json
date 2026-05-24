@@ -1,12 +1,7 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "env": {
-    "VITE_API_URL": "@vite-api-url"
-  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/.*|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ]
