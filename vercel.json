@@ -1,7 +1,21 @@
 {
+  "functions": {
+    "api/index.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    },
+    "api/[[...slug]].js": {
+      "memory": 1024,
+      "maxDuration": 30
+    },
+    "api/v1/[[...slug]].js": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!api/.*|.*\\.[a-zA-Z0-9]+$).*)",
+      "source": "/((?!api/.*|_next/.*|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ]
