@@ -10,7 +10,10 @@ import {
   updateDeliveryHandler,
 } from '../controllers/deliveryController.js'
 
-export async function registerRoutes(app) {
+// CRITICAL: This must be synchronous for Vercel serverless
+// If it's async, Fastify may wait for plugin to complete before ready
+export function registerRoutes(app) {
+  console.log('[routes] Registering delivery endpoints')
   app.get('/deliveries', listDeliveriesHandler)
   app.get('/deliveries/summary', summaryHandler)
   app.get('/deliveries/:id', getDeliveryHandler)

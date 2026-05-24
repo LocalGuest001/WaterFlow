@@ -5,23 +5,25 @@ import { migrateDatabase } from './db/migrate.js'
 import { seedDatabase } from './db/seed.js'
 import { closePool } from './db/pool.js'
 
+console.log('[server] MODULE START')
+
 const isDirectRun = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href
 
-console.log('[server] Initializing WaterFlow API')
-console.log('[server] Environment:', {
-  nodeEnv: env.nodeEnv,
-  port: env.port,
-  apiPrefix: env.apiPrefix,
+console.log('[server] Environment Detection', {
+  isDirectRun,
   isVercel: env.isVercel,
-  hasDatabaseUrl: !!env.databaseUrl,
-  useMemoryStore: env.isVercel || env.forceMemoryStore,
+  nodeEnv: env.nodeEnv,
 })
 
+console.log('[server] Building Fastify app...')
 const app = buildApp()
 
-console.log('[server] Fastify app built successfully')
+console.log('[server] APP CREATED - Export ready for Vercel')
+console.log('[server] App configured for:', env.isVercel ? 'Vercel Serverless' : 'Direct Server')
 
-export default app.server
+// CRITICAL: Export Fastify instance directly (not app.server)
+// Vercel's Node.js runtime needs the Fastify instance to route HTTP requests
+export default app
 
 async function main() {
   console.log('[server] Starting main server...')
@@ -70,7 +72,9 @@ if (isDirectRun && !env.isVercel) {
     process.exitCode = 1
   })
 } else if (!isDirectRun && env.isVercel) {
-  console.log('[server] Running on Vercel serverless environment')
+  console.log('[server] Vercel serverless environment detected - skipping listen()')
+  console.log('[server] READY FOR REQUESTS - Export complete')
 } else if (!isDirectRun) {
   console.log('[server] Module imported as dependency (not direct run)')
+  console.log('[server] READY FOR REQUESTS - Export complete')
 }
