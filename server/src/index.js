@@ -15,55 +15,18 @@ console.log('[server] Environment Detection', {
   nodeEnv: env.nodeEnv,
 })
 
+// For Vercel, the api/index.js file handles the serverless function
+// This file is only used for direct server execution (dev/local mode)
+if (env.isVercel && !isDirectRun) {
+  console.log('[server] Running in Vercel serverless environment - handler imported from api/index.js')
+  process.exit(0)
+}
+
 console.log('[server] Building Fastify app...')
 const app = buildApp()
 
-console.log('[server] APP CREATED - Export ready for Vercel')
+console.log('[server] APP CREATED')
 console.log('[server] App configured for:', env.isVercel ? 'Vercel Serverless' : 'Direct Server')
-
-// Ensure app is ready for Vercel on module load
-console.log('[server] Calling app.ready()...')
-await app.ready()
-console.log('[server] app ready')
-
-// CRITICAL: Create a Vercel-compatible handler function
-// Vercel expects: export default function(req, res)
-
-let appRouter = null
-
-// Initialize the app router on first request (lazy initialization for serverless)
-async function initializeRouter() {
-  if (!appRouter) {
-    console.log('[server] Initializing router on first request')
-    
-    // Get Fastify's router which can handle raw requests
-    // We use the internal routing method
-    appRouter = app.routing.bind(app)
-  }
-  return appRouter
-}
-
-export default async function handler(req, res) {
-  console.log('[server] handler invoked', { method: req.method, path: req.url })
-  console.log('[server] request routed')
-  
-  try {
-    // Initialize router if needed
-    if (!appRouter) {
-      await initializeRouter()
-    }
-    
-    // Use Fastify's internal routing to handle the request
-    // This passes the request directly to Fastify's router
-    await app.routing(req, res)
-  } catch (error) {
-    console.error('[server] handler error:', error.message)
-    if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json' })
-    }
-    res.end(JSON.stringify({ success: false, message: 'Internal server error' }))
-  }
-}
 
 async function main() {
   console.log('[server] Starting main server...')

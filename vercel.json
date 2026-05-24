@@ -2,21 +2,19 @@
   "functions": {
     "api/index.js": {
       "memory": 1024,
-      "maxDuration": 30
-    },
-    "api/[[...slug]].js": {
-      "memory": 1024,
-      "maxDuration": 30
-    },
-    "api/v1/[[...slug]].js": {
-      "memory": 1024,
-      "maxDuration": 30
+      "maxDuration": 30,
+      "runtime": "nodejs20.x"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/((?!api/.*|_next/.*|.*\\.[a-zA-Z0-9]+$).*)",
-      "destination": "/index.html"
+      "src": "/api(.*)",
+      "dest": "/api"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "status": 200
     }
   ]
 }
