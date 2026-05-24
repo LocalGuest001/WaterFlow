@@ -9,7 +9,7 @@ import { healthHandler } from './controllers/deliveryController.js'
 
 export function buildApp() {
   console.log('[app] PLUGINS START - Initializing Fastify instance')
-  
+
   const app = Fastify({
     logger: {
       level: env.nodeEnv === 'development' ? 'info' : 'warn',
@@ -24,7 +24,7 @@ export function buildApp() {
 
   console.log('[app] Registering helmet plugin')
   app.register(helmet)
-  
+
   console.log('[app] Registering CORS plugin')
   app.register(cors, {
     origin: (requestOrigin, callback) => {
@@ -52,23 +52,21 @@ export function buildApp() {
     },
     credentials: true,
   })
-  
+
   console.log('[app] Registering rate-limit plugin')
   app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
   })
 
-  // Add request logging hook
   console.log('[app] Adding onRequest hook')
-  app.addHook('onRequest', async (request, reply) => {
+  app.addHook('onRequest', async (request) => {
     request.startTime = Date.now()
     const method = request.method
     const path = request.url
     console.log(`[api] ${method} ${path}`)
   })
 
-  // Add response logging hook
   console.log('[app] Adding onResponse hook')
   app.addHook('onResponse', async (request, reply) => {
     const duration = Date.now() - (request.startTime || Date.now())
@@ -85,17 +83,14 @@ export function buildApp() {
 
   console.log('[app] Registering routes')
   console.log('[app] Creating scoped app with prefix:', env.apiPrefix)
-  
-  // CRITICAL FIX: Call registerRoutes directly instead of app.register()
-  // app.register() returns a Promise, which is async and not ready during module initialization
-  // Vercel serverless needs routes to be available IMMEDIATELY, not after a Promise resolves
+
   const scopedApp = {
     get: (path, ...args) => app.get(`${env.apiPrefix}${path}`, ...args),
     post: (path, ...args) => app.post(`${env.apiPrefix}${path}`, ...args),
     patch: (path, ...args) => app.patch(`${env.apiPrefix}${path}`, ...args),
     delete: (path, ...args) => app.delete(`${env.apiPrefix}${path}`, ...args),
   }
-  
+
   registerRoutes(scopedApp)
   console.log('[app] ROUTES REGISTERED (synchronously)')
 
