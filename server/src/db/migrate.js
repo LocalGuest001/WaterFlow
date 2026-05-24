@@ -50,7 +50,9 @@ export async function migrateDatabase() {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isDirectRun = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isDirectRun) {
   migrateDatabase()
     .then(() => {
       console.log('Migrations completed.')

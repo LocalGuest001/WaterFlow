@@ -1,18 +1,20 @@
+import { pathToFileURL } from 'node:url'
 import { env } from './config/env.js'
 import { buildApp } from './app.js'
 import { migrateDatabase } from './db/migrate.js'
 import { seedDatabase } from './db/seed.js'
 import { closePool } from './db/pool.js'
 
-async function main() {
-  // Run migrations and optional seed only in development or when explicitly requested.
-  // Avoid running these on production serverless cold-starts (they are slow and may cause timeouts).
-  if (env.nodeEnv === 'development' || process.env.RUN_MIGRATIONS === 'true') {
-    await migrateDatabase()
-    await seedDatabase()
-  }
+const isDirectRun = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href
+const isVercel = Boolean(process.env.VERCEL)
+const app = buildApp()
 
-  const app = buildApp()
+export default app.server
+
+async function main() {
+  await migrateDatabase()
+  await seedDatabase()
+
   let shuttingDown = false
 
   const closeServer = async (signal) => {
@@ -31,9 +33,11 @@ async function main() {
   app.log.info({ port: env.port, prefix: env.apiPrefix }, 'WaterFlow API started')
 }
 
-main().catch(async (error) => {
-  console.error('Failed to start server.')
-  console.error(error)
-  await closePool().catch(() => {})
-  process.exitCode = 1
-})
+if (isDirectRun && !isVercel) {
+  main().catch(async (error) => {
+    console.error('Failed to start server.')
+    console.error(error)
+    await closePool().catch(() => {})
+    process.exitCode = 1
+  })
+}

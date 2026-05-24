@@ -101,7 +101,9 @@ export async function seedDatabase() {
   return { seeded: true, count: rows.length }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isDirectRun = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isDirectRun) {
   migrateDatabase()
     .then(() => seedDatabase())
     .then((result) => {

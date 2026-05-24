@@ -3,6 +3,381 @@ import { pool } from '../db/pool.js'
 import { ApiError } from '../utils/apiError.js'
 import { clampDeliveryCounts, getPendingMetrics, normalizeDelivery } from '../domain/delivery.js'
 
+const useMemoryStore = (process.env.WATERFLOW_FORCE_MEMORY_STORE ?? '').toLowerCase() === 'true' || Boolean(process.env.VERCEL)
+
+function buildMemorySeedRows(now) {
+  return [
+    {
+      id: randomUUID(),
+      customer_name: 'Ahmed',
+      phone_number: '9876543210',
+      notes: 'Morning drop for the front shop',
+      coolers_issued: 2,
+      coolers_returned: 0,
+      bottles_issued: 4,
+      bottles_returned: 0,
+      created_at: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      updated_at: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      completed_at: null,
+      last_action_at: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      deleted_at: null,
+    },
+    {
+      id: randomUUID(),
+      customer_name: 'Nadia',
+      phone_number: '9123456780',
+      notes: 'Completed evening route',
+      coolers_issued: 1,
+      coolers_returned: 1,
+      bottles_issued: 2,
+      bottles_returned: 2,
+      created_at: new Date(now.getTime() - 26 * 60 * 60 * 1000),
+      updated_at: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+      completed_at: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+      last_action_at: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+      deleted_at: null,
+    },
+    {
+      id: randomUUID(),
+      customer_name: 'Karim',
+      phone_number: '9012345678',
+      notes: 'Overdue return pending',
+      coolers_issued: 1,
+      coolers_returned: 0,
+      bottles_issued: 1,
+      bottles_returned: 0,
+      created_at: new Date(now.getTime() - 72 * 60 * 60 * 1000),
+      updated_at: new Date(now.getTime() - 72 * 60 * 60 * 1000),
+      completed_at: null,
+      last_action_at: new Date(now.getTime() - 72 * 60 * 60 * 1000),
+      deleted_at: null,
+    },
+  ]
+}
+
+const memoryState = useMemoryStore
+  ? {
+      deliveries: buildMemorySeedRows(new Date()),
+    }
+  : null
+
+function cloneRow(row) {
+  return structuredClone(row)
+}
+
+function memoryRows() {
+  if (!memoryState) {
+    throw new Error('Memory store is not enabled.')
+  }
+
+  return memoryState.deliveries
+}
+
+function toMemoryRow(delivery, baseRow = {}) {
+  return {
+    id: delivery.id,
+    customer_name: delivery.customerName,
+    phone_number: delivery.phoneNumber,
+    notes: delivery.notes ?? '',
+    coolers_issued: delivery.coolersIssued,
+    coolers_returned: delivery.coolersReturned,
+    bottles_issued: delivery.bottlesIssued,
+    bottles_returned: delivery.bottlesReturned,
+    created_at: baseRow.created_at ?? delivery.createdAt ?? new Date(),
+    updated_at: baseRow.updated_at ?? delivery.updatedAt ?? new Date(),
+    completed_at: baseRow.completed_at ?? delivery.completedAt ?? null,
+    last_action_at: baseRow.last_action_at ?? delivery.lastActionAt ?? new Date(),
+    deleted_at: baseRow.deleted_at ?? delivery.deletedAt ?? null,
+  }
+}
+
+function memoryStatus(delivery) {
+  const pending = getPendingMetrics(delivery)
+  const totalPending = pending.coolersPending + pending.bottlesPending
+
+  if (totalPending === 0) {
+    return 'completed'
+  }
+
+  const createdAt = new Date(delivery.createdAt ?? delivery.created_at ?? Date.now())
+  return Date.now() - createdAt.getTime() >= 48 * 60 * 60 * 1000 ? 'overdue' : 'active'
+}
+
+function findMemoryDeliveryIndex(id) {
+  return memoryRows().findIndex((row) => row.id === id && row.deleted_at == null)
+}
+
+function listMemoryDeliveries(options = {}) {
+  const filters = normalizeListOptions(options)
+  const rows = memoryRows().filter((row) => row.deleted_at == null)
+
+  const filteredRows = rows.filter((row) => {
+    if (filters.q) {
+      const haystack = `${row.customer_name} ${row.phone_number}`.toLowerCase()
+      if (!haystack.includes(filters.q.toLowerCase())) {
+        return false
+      }
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      const status = memoryStatus({
+        ...row,
+        customerName: row.customer_name,
+        phoneNumber: row.phone_number,
+        notes: row.notes,
+        coolersIssued: row.coolers_issued,
+        coolersReturned: row.coolers_returned,
+        bottlesIssued: row.bottles_issued,
+        bottlesReturned: row.bottles_returned,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        completedAt: row.completed_at,
+        lastActionAt: row.last_action_at,
+        deletedAt: row.deleted_at,
+      })
+      if (status !== filters.status) {
+        return false
+      }
+    }
+
+    return true
+  })
+
+  const normalizedRows = filteredRows.map((row) => normalizeDelivery(row))
+  const sortedRows = normalizedRows.sort((left, right) => {
+    const sortKeyMap = {
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
+      lastActionAt: 'lastActionAt',
+      completedAt: 'completedAt',
+      customerName: 'customerName',
+    }
+
+    const key = sortKeyMap[filters.sortBy] ?? 'lastActionAt'
+    const leftValue = key === 'customerName' ? String(left.customerName ?? '').toLowerCase() : new Date(left[key] ?? 0).getTime()
+    const rightValue = key === 'customerName' ? String(right.customerName ?? '').toLowerCase() : new Date(right[key] ?? 0).getTime()
+
+    if (leftValue < rightValue) return filters.sortOrder === 'asc' ? -1 : 1
+    if (leftValue > rightValue) return filters.sortOrder === 'asc' ? 1 : -1
+    return String(right.id).localeCompare(String(left.id))
+  })
+
+  const total = sortedRows.length
+  const offset = (filters.page - 1) * filters.limit
+  const data = sortedRows.slice(offset, offset + filters.limit)
+
+  return {
+    data,
+    pagination: {
+      page: filters.page,
+      limit: filters.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / filters.limit)),
+    },
+  }
+}
+
+function getMemoryDelivery(id) {
+  assertUuid(id)
+  const row = memoryRows().find((item) => item.id === id && item.deleted_at == null)
+  if (!row) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  return row
+}
+
+function createMemoryDelivery(payload) {
+  const input = validateDeliveryInput(payload, { partial: false })
+  const now = new Date()
+  const delivery = finalizeDeliveryState(
+    {
+      id: randomUUID(),
+      customerName: input.customerName,
+      phoneNumber: input.phoneNumber,
+      notes: input.notes ?? '',
+      coolersIssued: input.coolersIssued ?? 1,
+      coolersReturned: 0,
+      bottlesIssued: input.bottlesIssued ?? 0,
+      bottlesReturned: 0,
+      createdAt: now,
+      updatedAt: now,
+      lastActionAt: now,
+      completedAt: null,
+    },
+    now,
+  )
+  assertConsistentCounts(delivery)
+
+  const row = toMemoryRow(delivery)
+  memoryRows().push(row)
+  return normalizeDelivery(row)
+}
+
+function updateMemoryDelivery(id, payload) {
+  const index = findMemoryDeliveryIndex(id)
+  if (index < 0) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  const existingRow = memoryRows()[index]
+  const existing = normalizeDelivery(existingRow)
+  const input = validateDeliveryInput(payload, { partial: true })
+  const merged = finalizeDeliveryState(combineDelivery(existing, input))
+  assertConsistentCounts(merged)
+  const now = new Date()
+
+  const nextRow = toMemoryRow(merged, {
+    ...existingRow,
+    created_at: existingRow.created_at,
+    deleted_at: existingRow.deleted_at,
+    updated_at: now,
+    last_action_at: now,
+  })
+  memoryRows()[index] = nextRow
+  return normalizeDelivery(nextRow)
+}
+
+function deleteMemoryDelivery(id) {
+  const index = findMemoryDeliveryIndex(id)
+  if (index < 0) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  const now = new Date()
+  const row = memoryRows()[index]
+  row.deleted_at = now
+  row.updated_at = now
+  row.last_action_at = now
+  return { id }
+}
+
+function returnMemoryCooler(id) {
+  const index = findMemoryDeliveryIndex(id)
+  if (index < 0) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  const row = memoryRows()[index]
+  const existing = normalizeDelivery(row)
+  if (existing.coolersPending <= 0) {
+    return existing
+  }
+
+  const now = new Date()
+  const final = finalizeDeliveryState(
+    {
+      ...existing,
+      coolersReturned: existing.coolersReturned + 1,
+    },
+    now,
+  )
+
+  const nextRow = toMemoryRow(final, {
+    ...row,
+    created_at: row.created_at,
+    deleted_at: row.deleted_at,
+    updated_at: now,
+    last_action_at: now,
+  })
+  memoryRows()[index] = nextRow
+  return normalizeDelivery(nextRow)
+}
+
+function returnMemoryBottle(id) {
+  const index = findMemoryDeliveryIndex(id)
+  if (index < 0) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  const row = memoryRows()[index]
+  const existing = normalizeDelivery(row)
+  if (existing.bottlesPending <= 0) {
+    return existing
+  }
+
+  const now = new Date()
+  const final = finalizeDeliveryState(
+    {
+      ...existing,
+      bottlesReturned: existing.bottlesReturned + 1,
+    },
+    now,
+  )
+
+  const nextRow = toMemoryRow(final, {
+    ...row,
+    created_at: row.created_at,
+    deleted_at: row.deleted_at,
+    updated_at: now,
+    last_action_at: now,
+  })
+  memoryRows()[index] = nextRow
+  return normalizeDelivery(nextRow)
+}
+
+function returnMemoryAll(id) {
+  const index = findMemoryDeliveryIndex(id)
+  if (index < 0) {
+    throw new ApiError(404, 'Delivery not found.')
+  }
+
+  const row = memoryRows()[index]
+  const existing = normalizeDelivery(row)
+  if (existing.pendingTotal <= 0) {
+    return existing
+  }
+
+  const now = new Date()
+  const nextRow = toMemoryRow(
+    {
+      ...existing,
+      coolersReturned: existing.coolersIssued,
+      bottlesReturned: existing.bottlesIssued,
+      completedAt: now,
+      updatedAt: now,
+      lastActionAt: now,
+    },
+    {
+      ...row,
+      created_at: row.created_at,
+      deleted_at: row.deleted_at,
+      updated_at: now,
+      last_action_at: now,
+      completed_at: now,
+    },
+  )
+  memoryRows()[index] = nextRow
+  return normalizeDelivery(nextRow)
+}
+
+function getMemorySummary() {
+  const rows = memoryRows().filter((row) => row.deleted_at == null).map((row) => normalizeDelivery(row))
+  const summary = rows.reduce(
+    (accumulator, delivery) => {
+      accumulator.totalDeliveries += 1
+      accumulator.pendingCoolers += delivery.coolersPending
+      accumulator.pendingBottles += delivery.bottlesPending
+
+      if (delivery.status === 'active') accumulator.activeDeliveries += 1
+      if (delivery.status === 'overdue') accumulator.overdueDeliveries += 1
+      if (delivery.status === 'completed') accumulator.completedDeliveries += 1
+
+      return accumulator
+    },
+    {
+      totalDeliveries: 0,
+      activeDeliveries: 0,
+      overdueDeliveries: 0,
+      completedDeliveries: 0,
+      pendingCoolers: 0,
+      pendingBottles: 0,
+    },
+  )
+
+  return summary
+}
+
 function statusExpression(alias = 'd') {
   const coolersPending = `GREATEST(${alias}.coolers_issued - ${alias}.coolers_returned, 0)`
   const bottlesPending = `GREATEST(${alias}.bottles_issued - ${alias}.bottles_returned, 0)`
@@ -139,6 +514,10 @@ function assertConsistentCounts(delivery) {
 }
 
 async function findDeliveryOrThrow(id) {
+  if (useMemoryStore) {
+    return normalizeDelivery(getMemoryDelivery(id))
+  }
+
   assertUuid(id)
   const result = await pool.query(
     `
@@ -187,6 +566,10 @@ function finalizeDeliveryState(delivery, now = new Date()) {
 }
 
 export async function listDeliveries(options = {}) {
+  if (useMemoryStore) {
+    return listMemoryDeliveries(options)
+  }
+
   const filters = normalizeListOptions(options)
   const { clauses, params } = buildWhereClauses(filters)
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
@@ -228,10 +611,18 @@ export async function listDeliveries(options = {}) {
 }
 
 export async function getDelivery(id) {
+  if (useMemoryStore) {
+    return normalizeDelivery(getMemoryDelivery(id))
+  }
+
   return findDeliveryOrThrow(id)
 }
 
 export async function createDelivery(payload) {
+  if (useMemoryStore) {
+    return createMemoryDelivery(payload)
+  }
+
   const input = validateDeliveryInput(payload, { partial: false })
   const now = new Date()
   const id = randomUUID()
@@ -287,6 +678,10 @@ export async function createDelivery(payload) {
 }
 
 export async function updateDelivery(id, payload) {
+  if (useMemoryStore) {
+    return updateMemoryDelivery(id, payload)
+  }
+
   const existing = await findDeliveryOrThrow(id)
   const input = validateDeliveryInput(payload, { partial: true })
   const merged = finalizeDeliveryState(combineDelivery(existing, input))
@@ -328,6 +723,10 @@ export async function updateDelivery(id, payload) {
 }
 
 export async function deleteDelivery(id) {
+  if (useMemoryStore) {
+    return deleteMemoryDelivery(id)
+  }
+
   await findDeliveryOrThrow(id)
 
   const result = await pool.query(
@@ -348,6 +747,10 @@ export async function deleteDelivery(id) {
 }
 
 export async function returnCooler(id) {
+  if (useMemoryStore) {
+    return returnMemoryCooler(id)
+  }
+
   const existing = await findDeliveryOrThrow(id)
   if (existing.coolersPending <= 0) {
     return existing
@@ -376,6 +779,10 @@ export async function returnCooler(id) {
 }
 
 export async function returnBottle(id) {
+  if (useMemoryStore) {
+    return returnMemoryBottle(id)
+  }
+
   const existing = await findDeliveryOrThrow(id)
   if (existing.bottlesPending <= 0) {
     return existing
@@ -404,6 +811,10 @@ export async function returnBottle(id) {
 }
 
 export async function returnAll(id) {
+  if (useMemoryStore) {
+    return returnMemoryAll(id)
+  }
+
   const existing = await findDeliveryOrThrow(id)
   if (existing.pendingTotal <= 0) {
     return existing
@@ -429,6 +840,10 @@ export async function returnAll(id) {
 }
 
 export async function getSummary() {
+  if (useMemoryStore) {
+    return getMemorySummary()
+  }
+
   const result = await pool.query(`
     SELECT
       COUNT(*)::int AS "totalDeliveries",
