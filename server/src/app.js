@@ -84,9 +84,20 @@ export function buildApp() {
   app.get('/health', healthHandler)
 
   console.log('[app] Registering routes')
-  app.register(registerRoutes, { prefix: env.apiPrefix })
-
-  console.log('[app] ROUTES REGISTERED')
+  console.log('[app] Creating scoped app with prefix:', env.apiPrefix)
+  
+  // CRITICAL FIX: Call registerRoutes directly instead of app.register()
+  // app.register() returns a Promise, which is async and not ready during module initialization
+  // Vercel serverless needs routes to be available IMMEDIATELY, not after a Promise resolves
+  const scopedApp = {
+    get: (path, ...args) => app.get(`${env.apiPrefix}${path}`, ...args),
+    post: (path, ...args) => app.post(`${env.apiPrefix}${path}`, ...args),
+    patch: (path, ...args) => app.patch(`${env.apiPrefix}${path}`, ...args),
+    delete: (path, ...args) => app.delete(`${env.apiPrefix}${path}`, ...args),
+  }
+  
+  registerRoutes(scopedApp)
+  console.log('[app] ROUTES REGISTERED (synchronously)')
 
   console.log('[app] Setting not-found handler')
   app.setNotFoundHandler(() => {
@@ -121,5 +132,3 @@ export function buildApp() {
 
   return app
 }
-
-export default buildApp
