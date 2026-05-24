@@ -5,8 +5,12 @@ import { seedDatabase } from './db/seed.js'
 import { closePool } from './db/pool.js'
 
 async function main() {
-  await migrateDatabase()
-  await seedDatabase()
+  // Run migrations and optional seed only in development or when explicitly requested.
+  // Avoid running these on production serverless cold-starts (they are slow and may cause timeouts).
+  if (env.nodeEnv === 'development' || process.env.RUN_MIGRATIONS === 'true') {
+    await migrateDatabase()
+    await seedDatabase()
+  }
 
   const app = buildApp()
   let shuttingDown = false
