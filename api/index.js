@@ -2,7 +2,7 @@
 // This is the ONLY file Vercel should load as the function entrypoint
 // It imports buildApp from the server and creates a Vercel-compatible handler
 
-import { buildApp } from '../server/src/buildApp.js'
+import { buildApp } from '../server/src/app.js'
 
 console.log('[vercel] handler start')
 
@@ -38,3 +38,4 @@ export default async function handler(req, res) {
     }
   }
 }
+

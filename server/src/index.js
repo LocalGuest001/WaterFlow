@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url'
 import { env } from './config/env.js'
-import { buildApp } from './buildApp.js'
+import { buildApp } from './app.js'
 import { migrateDatabase } from './db/migrate.js'
 import { seedDatabase } from './db/seed.js'
 import { closePool } from './db/pool.js'
