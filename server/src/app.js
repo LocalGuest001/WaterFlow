@@ -12,6 +12,7 @@ export function buildApp() {
     logger: {
       level: env.nodeEnv === 'development' ? 'info' : 'warn',
     },
+    requestTimeout: 30_000, // 30 second timeout for requests
   })
 
   const configuredOrigins = env.corsOrigin === '*' ? [] : env.corsOrigin.split(',').map((value) => value.trim()).filter(Boolean)
@@ -49,6 +50,23 @@ export function buildApp() {
     timeWindow: '1 minute',
   })
 
+  // Add request logging hook
+  app.addHook('onRequest', async (request, reply) => {
+    request.startTime = Date.now()
+    const method = request.method
+    const path = request.url
+    console.log(`[api] ${method} ${path}`)
+  })
+
+  // Add response logging hook
+  app.addHook('onResponse', async (request, reply) => {
+    const duration = Date.now() - (request.startTime || Date.now())
+    const method = request.method
+    const path = request.url
+    const statusCode = reply.statusCode
+    console.log(`[api] ${method} ${path} ${statusCode} ${duration}ms`)
+  })
+
   app.get('/health', healthHandler)
 
   app.register(registerRoutes, { prefix: env.apiPrefix })
@@ -58,7 +76,9 @@ export function buildApp() {
   })
 
   app.setErrorHandler((error, request, reply) => {
-    request.log.error({ err: error }, 'Request failed')
+    const duration = Date.now() - (request.startTime || Date.now())
+    request.log.error({ err: error, duration }, 'Request failed')
+    console.error(`[api] Error after ${duration}ms:`, error.message)
 
     if (isApiError(error)) {
       return reply.status(error.statusCode).send({

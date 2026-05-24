@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { pool } from '../db/pool.js'
 import { ApiError } from '../utils/apiError.js'
 import { clampDeliveryCounts, getPendingMetrics, normalizeDelivery } from '../domain/delivery.js'
+import { env } from '../config/env.js'
 
-const useMemoryStore = (process.env.WATERFLOW_FORCE_MEMORY_STORE ?? '').toLowerCase() === 'true' || Boolean(process.env.VERCEL)
+const useMemoryStore = env.isVercel || env.forceMemoryStore
 
 function buildMemorySeedRows(now) {
   return [
@@ -566,6 +567,7 @@ function finalizeDeliveryState(delivery, now = new Date()) {
 }
 
 export async function listDeliveries(options = {}) {
+  console.log('[deliveries] listDeliveries', { useMemoryStore, options })
   if (useMemoryStore) {
     return listMemoryDeliveries(options)
   }
@@ -840,6 +842,7 @@ export async function returnAll(id) {
 }
 
 export async function getSummary() {
+  console.log('[deliveries] getSummary', { useMemoryStore })
   if (useMemoryStore) {
     return getMemorySummary()
   }

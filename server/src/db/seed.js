@@ -55,50 +55,65 @@ function buildSeedRows(now) {
 }
 
 export async function seedDatabase() {
+  // Skip if no database URL configured (using memory store)
+  if (!env.databaseUrl) {
+    console.log('[seed] Skipping seed: DATABASE_URL not configured')
+    return { seeded: false, reason: 'DATABASE_URL not configured' }
+  }
+
   if (!env.seedDemoData) {
+    console.log('[seed] Skipping seed: SEED_DEMO_DATA disabled')
     return { seeded: false, reason: 'SEED_DEMO_DATA disabled' }
   }
 
-  const existing = await pool.query('SELECT COUNT(*)::int AS count FROM deliveries WHERE deleted_at IS NULL')
-  if ((existing.rows[0]?.count ?? 0) > 0) {
-    return { seeded: false, reason: 'deliveries already exist' }
+  console.log('[seed] Starting seed process...')
+  try {
+    const existing = await pool.query('SELECT COUNT(*)::int AS count FROM deliveries WHERE deleted_at IS NULL')
+    if ((existing.rows[0]?.count ?? 0) > 0) {
+      console.log('[seed] Skipping seed: deliveries already exist')
+      return { seeded: false, reason: 'deliveries already exist' }
+    }
+
+    const now = new Date()
+    const rows = buildSeedRows(now)
+
+    for (const row of rows) {
+      await pool.query(
+        `
+          INSERT INTO deliveries (
+            id, customer_name, phone_number, notes,
+            coolers_issued, coolers_returned, bottles_issued, bottles_returned,
+            created_at, updated_at, completed_at, last_action_at, deleted_at
+          ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10, $11, $12, $13
+          )
+        `,
+        [
+          row.id,
+          row.customer_name,
+          row.phone_number,
+          row.notes,
+          row.coolers_issued,
+          row.coolers_returned,
+          row.bottles_issued,
+          row.bottles_returned,
+          row.created_at,
+          row.updated_at,
+          row.completed_at,
+          row.last_action_at,
+          row.deleted_at,
+        ],
+      )
+    }
+
+    console.log(`[seed] Seeded ${rows.length} deliveries successfully`)
+    return { seeded: true, count: rows.length }
+  } catch (error) {
+    console.error('[seed] Seed failed:', error.message)
+    throw error
   }
-
-  const now = new Date()
-  const rows = buildSeedRows(now)
-
-  for (const row of rows) {
-    await pool.query(
-      `
-        INSERT INTO deliveries (
-          id, customer_name, phone_number, notes,
-          coolers_issued, coolers_returned, bottles_issued, bottles_returned,
-          created_at, updated_at, completed_at, last_action_at, deleted_at
-        ) VALUES (
-          $1, $2, $3, $4,
-          $5, $6, $7, $8,
-          $9, $10, $11, $12, $13
-        )
-      `,
-      [
-        row.id,
-        row.customer_name,
-        row.phone_number,
-        row.notes,
-        row.coolers_issued,
-        row.coolers_returned,
-        row.bottles_issued,
-        row.bottles_returned,
-        row.created_at,
-        row.updated_at,
-        row.completed_at,
-        row.last_action_at,
-        row.deleted_at,
-      ],
-    )
-  }
-
-  return { seeded: true, count: rows.length }
 }
 
 const isDirectRun = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href
@@ -107,10 +122,10 @@ if (isDirectRun) {
   migrateDatabase()
     .then(() => seedDatabase())
     .then((result) => {
-      console.log('Seed completed.', result)
+      console.log('[seed] Seed completed.', result)
     })
     .catch((error) => {
-      console.error('Seed failed.')
+      console.error('[seed] Seed failed.')
       console.error(error)
       process.exitCode = 1
     })
