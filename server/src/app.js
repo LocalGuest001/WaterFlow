@@ -17,6 +17,10 @@ export async function buildApp() {
     requestTimeout: 30_000,
   });
 
+  app.options("*", async (request, reply) => {
+    reply.send();
+  });
+
   console.log("[app] Fastify instance created");
 
   const configuredOrigins =
@@ -34,8 +38,10 @@ export async function buildApp() {
 
   console.log("[app] Registering CORS plugin");
   await app.register(cors, {
-    origin: ["http://localhost:5173", "https://water-flow-zeta.vercel.app"],
+    origin: true,
     credentials: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
   // app.register(cors, {
   //   origin: (requestOrigin, callback) => {
