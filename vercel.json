@@ -10,14 +10,14 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server/src/app.js"
+      "dest": "/server/src/app.js"
     },
     {
       "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/"
     }
   ]
 }
