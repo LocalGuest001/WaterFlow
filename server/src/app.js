@@ -34,7 +34,15 @@ export async function buildApp() {
     /^https?:\/\/(localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3}):(5173|5174)$/;
 
   console.log("[app] Registering helmet plugin");
-  await app.register(helmet);
+  //await app.register(helmet);
+  app.get("/health", healthHandler);
+
+  app.get("/test", async (request, reply) => {
+    return {
+      success: true,
+      cors: "working",
+    };
+  });
 
   console.log("[app] Registering CORS plugin");
   await app.register(cors, {
