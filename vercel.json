@@ -9,8 +9,8 @@
       "handle": "filesystem"
     },
     {
-      "src": "/(.*)",
-      "dest": "/"
+      "src": "/.*",
+      "dest": "/index.html"
     }
   ]
 }
