@@ -133,4 +133,9 @@ export function buildApp() {
   return app
 }
 
-export default buildApp()
+const app = buildApp()
+
+export default async function handler(req, res) {
+  await app.ready()
+  app.server.emit('request', req, res)
+}
