@@ -7,7 +7,7 @@ import { ApiError, isApiError } from "./utils/apiError.js";
 import { registerRoutes } from "./routes/router.js";
 import { healthHandler } from "./controllers/deliveryController.js";
 
-export function buildApp() {
+export async function buildApp() {
   console.log("[app] PLUGINS START - Initializing Fastify instance");
 
   const app = Fastify({
@@ -30,10 +30,10 @@ export function buildApp() {
     /^https?:\/\/(localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3}):(5173|5174)$/;
 
   console.log("[app] Registering helmet plugin");
-  app.register(helmet);
+  await app.register(helmet);
 
   console.log("[app] Registering CORS plugin");
-  app.register(cors, {
+  await app.register(cors, {
     origin: ["http://localhost:5173", "https://water-flow-zeta.vercel.app"],
     credentials: true,
   });
@@ -65,7 +65,7 @@ export function buildApp() {
   // })
 
   console.log("[app] Registering rate-limit plugin");
-  app.register(rateLimit, {
+  await app.register(rateLimit, {
     max: 120,
     timeWindow: "1 minute",
   });
@@ -150,9 +150,12 @@ export function buildApp() {
   return app;
 }
 
-const app = buildApp();
+const appPromise = buildApp();
 
 export default async function handler(req, res) {
+  const app = await appPromise;
+
   await app.ready();
+
   app.server.emit("request", req, res);
 }
