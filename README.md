@@ -1,6 +1,10 @@
 # WaterFlow
 
-WaterFlow is a local delivery tracking app with a React frontend, a Fastify backend, and PostgreSQL as the database. The frontend talks to the backend through `/api/v1`, so both services need to be running for the app to work correctly.
+WaterFlow is a local delivery tracking app with a React frontend, a PostgreSQL database, and a backend API.
+
+Note: the original Node/Fastify backend in `server/` is deprecated. A new Python/FastAPI backend lives in `api/` and is the supported server for current development. See `server/DEPRECATED.md` for migration notes.
+
+The frontend talks to the backend through `/api/v1`, so an API service needs to be running for the app to work correctly.
 
 ## Requirements
 
@@ -45,13 +49,18 @@ SEED_DEMO_DATA=false
 
 Open two terminals and start both services:
 
-### 1. Start the backend
+### 1. Start the backend (FastAPI - recommended)
+
+Start the Python FastAPI backend (recommended):
 
 ```powershell
-npm run server:dev
+# from the repo root (recommended)
+python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The backend listens on `http://localhost:4000` by default.
+The FastAPI app listens on `http://localhost:8000` by default. The frontend expects the API at `/api/v1` — set `VITE_API_URL` in a `.env` file or `.env.local` (see `src/services/api.js`).
+
+If you still need the old Node backend for reference, see `server/DEPRECATED.md` — it is no longer the recommended runtime and running `npm run server:dev` will print a deprecation notice.
 
 ### 2. Start the frontend
 
@@ -71,8 +80,14 @@ Vite may choose `http://localhost:5173` or `http://localhost:5174` if one port i
 
 Run database migration:
 
+If you're using the original Node migrations, they remain in `server/migrations/`. The Python service does not currently run those migrations automatically; apply them to your Postgres instance using the provided SQL or your own migration tooling. Example (from repo root):
+
 ```powershell
+# run Node-style migration script (legacy)
 npm run server:migrate
+
+# Or apply SQL directly, e.g. using psql:
+# psql "$DATABASE_URL" -f server/migrations/001_initial_schema.sql
 ```
 
 Seed demo data:

@@ -12,6 +12,8 @@
     "server:start": "npm --prefix server run start",
     "server:migrate": "npm --prefix server run db:migrate",
     "server:seed": "npm --prefix server run db:seed"
+    ,"api:dev": "python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000",
+    "server:deprecated": "node -e \"console.error('DEPRECATED: use the FastAPI service in api/ instead. See server/DEPRECATED.md'); process.exit(1)\""
   },
   "dependencies": {
     "dayjs": "^1.11.20",

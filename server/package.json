@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
-    "db:migrate": "node src/db/migrate.js",
-    "db:seed": "node src/db/seed.js"
+    "dev": "node -e \"console.error('DEPRECATED: The Node/Fastify backend in server/ is deprecated. Use the Python FastAPI service in ../api. See ../server/DEPRECATED.md for details.'); process.exit(1)\"",
+    "start": "node -e \"console.error('DEPRECATED: The Node/Fastify backend in server/ is deprecated. Use the Python FastAPI service in ../api. See ../server/DEPRECATED.md for details.'); process.exit(1)\"",
+    "legacy:dev": "node --watch src/index.js",
+    "db:migrate": "node -e \"console.error('DEPRECATED: migration helper disabled. Apply SQL from server/migrations/ or see api/ for migration guidance.'); process.exit(1)\"",
+    "db:seed": "node -e \"console.error('DEPRECATED: seeding disabled. See server/DEPRECATED.md for guidance.'); process.exit(1)\""
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

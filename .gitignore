@@ -25,3 +25,8 @@ server/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Local env files (do not commit secrets)
+.env
+.env.local
+api/.env
